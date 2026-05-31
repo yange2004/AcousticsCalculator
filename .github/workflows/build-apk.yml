@@ -3,8 +3,8 @@ name: Build APK
 on:
   push:
     branches: [ master, main ]
-    tags: [ 'v*' ]          # 推送标签时也触发
-  workflow_dispatch:         # 手动触发
+    tags: [ 'v*' ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,28 +20,34 @@ jobs:
           java-version: 17
           distribution: temurin
 
-      - name: 🤖 设置 Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: 📦 安装 SDK 34 平台
+      - name: 🤖 设置 Android SDK 环境
         run: |
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" --sdk_root=$ANDROID_HOME
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls $ANDROID_HOME/platforms/ 2>/dev/null || echo "无 platforms"
+
+      - name: 📦 安装所需 SDK
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            --sdk_root=$ANDROID_HOME
 
       - name: 🔧 授权 Gradle 执行权限
         run: chmod +x gradlew
 
       - name: 🏗️ 编译 Debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: 📤 上传 APK 编译产物
+      - name: 📤 上传 APK
         uses: actions/upload-artifact@v4
         with:
           name: AcousticsCalculator-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      - name: 🏗️ 编译 Release APK（混淆优化）
-        run: ./gradlew assembleRelease
+      - name: 🏗️ 编译 Release APK
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
         continue-on-error: true
 
       - name: 📤 上传 Release APK
@@ -51,7 +57,7 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
 
-      - name: 🏷️ 创建 Release（仅推送标签时）
+      - name: 🏷️ 创建 Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
