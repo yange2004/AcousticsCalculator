@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">建筑声学计算器</string>
+    <string name="tab_dashboard">首页</string>
+    <string name="tab_materials">材料库</string>
+    <string name="tab_projects">项目</string>
+    <string name="tab_converter">转换</string>
+    <string name="room_acoustics">室内声学计算</string>
+    <string name="insulation">隔声计算</string>
+    <string name="noise">噪声预测</string>
+    <string name="standards">标准查询</string>
+    <string name="calculate">计算</string>
+    <string name="save">保存</string>
+    <string name="export_pdf">导出PDF</string>
+    <string name="delete">删除</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确认</string>
+    <string name="search">搜索</string>
+    <string name="room_length">房间长度 (m)</string>
+    <string name="room_width">房间宽度 (m)</string>
+    <string name="room_height">房间高度 (m)</string>
+    <string name="formula_sabine">赛宾公式</string>
+    <string name="formula_eyring">艾林公式</string>
+    <string name="formula_fitzroy">菲茨罗伊公式</string>
+    <string name="formula_knutsen">努特森公式</string>
+    <string name="surface_ceiling">天花板</string>
+    <string name="surface_floor">地板</string>
+    <string name="surface_wall">墙面</string>
+    <string name="rt60_result">混响时间 RT60</string>
+    <string name="clarity_c50">清晰度 C50</string>
+    <string name="clarity_c80">清晰度 C80</string>
+    <string name="stipa">语言传输指数 STIPA</string>
+    <string name="bass_ratio">低音比 LF</string>
+    <string name="strength_factor">强度因子 G</string>
+    <string name="standard_compliant">达标</string>
+    <string name="standard_not_compliant">不达标</string>
+    <string name="no_project">暂无项目</string>
+    <string name="create_project">新建项目</string>
+    <string name="project_name">项目名称</string>
+    <string name="about">关于</string>
+    <string name="settings">设置</string>
+</resources>
