@@ -20,24 +20,36 @@ jobs:
           java-version: 17
           distribution: temurin
 
-      - name: 🤖 设置 Android SDK 环境
+      - name: 🤖 检查 Android SDK
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls $ANDROID_HOME/platforms/ 2>/dev/null || echo "无 platforms"
+          echo "ANDROID_HOME=${{ env.ANDROID_HOME }}"
+          echo "ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}"
+          ls -la $ANDROID_HOME/ 2>/dev/null || echo "ANDROID_HOME 未设置"
+          which sdkmanager 2>/dev/null || find / -name sdkmanager -type f 2>/dev/null | head -3
 
       - name: 📦 安装所需 SDK
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
-            --sdk_root=$ANDROID_HOME
+          ANDROID_HOME="/usr/local/lib/android/sdk"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          ls $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager 2>/dev/null || \
+            ls $ANDROID_HOME/tools/bin/sdkmanager 2>/dev/null || \
+            echo "sdkmanager 未找到"
 
       - name: 🔧 授权 Gradle 执行权限
         run: chmod +x gradlew
 
       - name: 🏗️ 编译 Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: |
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle.log
+        shell: bash
+
+      - name: 📤 上传编译日志（供诊断）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: gradle.log
+          if-no-files-found: warn
 
       - name: 📤 上传 APK
         uses: actions/upload-artifact@v4
