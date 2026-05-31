@@ -3,7 +3,8 @@ name: Build APK
 on:
   push:
     branches: [ master, main ]
-  workflow_dispatch:  # 手动触发
+    tags: [ 'v*' ]          # 推送标签时也触发
+  workflow_dispatch:         # 手动触发
 
 jobs:
   build:
@@ -32,14 +33,14 @@ jobs:
       - name: 🏗️ 编译 Debug APK
         run: ./gradlew assembleDebug
 
-      - name: 📤 上传 APK
+      - name: 📤 上传 APK 编译产物
         uses: actions/upload-artifact@v4
         with:
-          name: AcousticsCalculator-APK
+          name: AcousticsCalculator-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      - name: 🏗️ 编译 Release APK（带混淆）
+      - name: 🏗️ 编译 Release APK（混淆优化）
         run: ./gradlew assembleRelease
         continue-on-error: true
 
@@ -49,3 +50,12 @@ jobs:
           name: AcousticsCalculator-Release-APK
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
+
+      - name: 🏷️ 创建 Release（仅推送标签时）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+          generate_release_notes: true
