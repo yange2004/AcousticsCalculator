@@ -9,12 +9,11 @@ import com.acoustics.calculator.data.local.entity.MaterialCategoryEntity
 import com.acoustics.calculator.data.local.entity.MaterialEntity
 import com.acoustics.calculator.data.local.entity.StandardEntity
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
-import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.InputStreamReader
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -76,12 +75,12 @@ class MaterialPreloader @Inject constructor(
 
     private fun loadMaterialsFromJson(): List<MaterialEntity> {
         return try {
-            val inputStream = context.assets.open("database/materials_preload.json")
-            val reader = InputStreamReader(inputStream, "UTF-8")
-            val type = object : TypeToken<List<MaterialJsonDto>>() {}.type
-            val dtos: List<MaterialJsonDto> = gson.fromJson(reader, type)
-            reader.close()
-            dtos.map { it.toEntity() }
+            val json = context.assets.open("database/materials_preload.json")
+                .bufferedReader().use { it.readText() }
+            val jsonArray = JsonParser.parseString(json).asJsonArray
+            jsonArray.map { element ->
+                gson.fromJson(element, MaterialJsonDto::class.java).toEntity()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             emptyList()
