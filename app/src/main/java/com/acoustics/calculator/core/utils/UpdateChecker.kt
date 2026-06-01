@@ -29,15 +29,17 @@ object UpdateChecker {
     // version.json 来源（哪个快用哪个）
     private val VERSION_JSON_URLS = listOf(
         "https://cdn.jsdelivr.net/gh/$GH_OWNER/$GH_REPO@master/version.json",
-        "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/version.json",
         "https://ghproxy.net/https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/version.json",
+        "https://gitee.com/yangyan2004/acoustics-calculator/raw/master/version.json",
+        "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/version.json",
     )
 
     // APK 下载地址（按速度优先级排序）
     private val APK_DOWNLOAD_URLS = listOf(
         "https://cdn.jsdelivr.net/gh/$GH_OWNER/$GH_REPO@master/建筑声学计算器.apk",
-        "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/建筑声学计算器.apk",
         "https://ghproxy.net/https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/建筑声学计算器.apk",
+        "https://gitee.com/yangyan2004/acoustics-calculator/raw/master/建筑声学计算器.apk",
+        "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/建筑声学计算器.apk",
         "https://github.com/$GH_OWNER/$GH_REPO/releases/download/v${AppVersion.NAME}/建筑声学计算器.apk",
     )
 
