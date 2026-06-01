@@ -206,7 +206,8 @@ object UpdateChecker {
     }
 
     /**
-     * 解析版本JSON：{"versionCode":3,"versionName":"2.1.0","downloadUrl":"...","releaseNotes":"..."}
+     * 解析版本JSON：{"versionCode":"4","versionName":"2.2.0",...}
+     * 兼容 versionCode 为数字或字符串两种格式
      */
     private fun parseVersionJson(json: String): VersionInfo? {
         return try {
@@ -214,9 +215,14 @@ object UpdateChecker {
                 val start = json.indexOf("\"$key\"")
                 if (start < 0) return ""
                 val colon = json.indexOf(':', start) + 1
-                // 跳过空格
                 var c = colon
                 while (c < json.length && json[c] == ' ') c++
+                // 数字值：直接读到逗号/括号
+                if (c < json.length && json[c] != '"') {
+                    val end = json.indexOfAny(charArrayOf(',', '}', ']', '\n', '\r'), c)
+                    return if (end > c) json.substring(c, end).trim() else ""
+                }
+                // 字符串值：取引号内的内容
                 val quote1 = json.indexOf('"', c)
                 val quote2 = json.indexOf('"', quote1 + 1)
                 return if (quote1 >= 0 && quote2 > quote1) json.substring(quote1 + 1, quote2) else ""
