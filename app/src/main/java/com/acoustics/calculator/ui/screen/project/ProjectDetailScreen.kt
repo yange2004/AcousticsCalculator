@@ -190,7 +190,8 @@ fun ProjectDetailScreen(
                             onClick = {
                                 scope.launch {
                                     val path = ExportUtils.exportProjectToCsv(context, proj)
-                                    exportResult = if (path != null) "已导出到: $path" else "导出失败"
+                                    exportResult = if (path != null) "✅ 已导出到「下载」文件夹: ${proj.name}.csv"
+                                    else "❌ 导出失败"
                                 }
                             }
                         )

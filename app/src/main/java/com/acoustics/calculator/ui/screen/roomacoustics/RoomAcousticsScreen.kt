@@ -283,7 +283,7 @@ fun RoomAcousticsScreen(
                                             .map { "${"%.2f".format(it.value)}" }
                                     }
                                 val path = ExportUtils.exportResultToCsv(context, "室内声学_${result.formula.label}", headers, rows)
-                                exportResult = if (path != null) "✅ 已导出到: $path" else "❌ 导出失败"
+                                exportResult = if (path != null) "✅ CSV已导出到手机「下载」文件夹" else "❌ 导出失败"
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
