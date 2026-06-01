@@ -1,18 +1,21 @@
 package com.acoustics.calculator.core.utils
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import com.acoustics.calculator.core.constants.AppVersion
 import com.acoustics.calculator.domain.repository.Project
 import java.io.File
-import java.io.FileWriter
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * 导出工具 — 支持 CSV、文本导出和分享
+ * 导出工具 — 文件存到手机真正的「下载」文件夹，用户能看见的那种
  */
 object ExportUtils {
 
@@ -20,33 +23,17 @@ object ExportUtils {
     private val displayDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
     /**
-     * 导出项目信息为 CSV 文件（可用 Excel 打开）
+     * 导出项目信息为 CSV 文件（存到手机「下载」文件夹）
      */
     suspend fun exportProjectToCsv(context: Context, project: Project): String? {
         return try {
-            val dir = getExportDir(context) ?: return null
-            val fileName = "项目_${project.name}_${dateFormat.format(Date())}.csv"
-            val file = File(dir, fileName)
-
-            FileWriter(file).use { writer ->
-                // BOM for Excel UTF-8 compatibility
-                writer.write("﻿")
-                writer.write("建筑声学计算器 - 项目导出\n")
-                writer.write("导出时间,${displayDateFormat.format(Date())}\n")
-                writer.write("版本,${AppVersion.DISPLAY}\n\n")
-
-                writer.write("项目名称,${project.name}\n")
-                writer.write("项目类型,${project.projectType}\n")
-                writer.write("描述,${project.description}\n")
-                writer.write("创建时间,${displayDateFormat.format(Date(project.createdAt))}\n")
-                writer.write("更新时间,${displayDateFormat.format(Date(project.updatedAt))}\n")
-                writer.write("标签,${project.tags.joinToString(";")}\n")
+            val fileName = "声学项目_${sanitizeFileName(project.name)}_${dateFormat.format(Date())}.csv"
+            val csvContent = buildProjectCsv(project)
+            if (Build.VERSION.SDK_INT >= 29) {
+                saveToPublicDownloads(context, fileName, "text/csv", csvContent)
+            } else {
+                saveToLegacyDownloads(context, fileName, csvContent)
             }
-
-            // 通知系统文件管理器
-            notifyFileScan(context, file)
-
-            file.absolutePath
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -54,7 +41,7 @@ object ExportUtils {
     }
 
     /**
-     * 导出计算结果为 CSV 文件
+     * 导出计算结果为 CSV 文件（存到手机「下载」文件夹）
      */
     suspend fun exportResultToCsv(
         context: Context,
@@ -63,27 +50,13 @@ object ExportUtils {
         dataRows: List<List<String>>
     ): String? {
         return try {
-            val dir = getExportDir(context) ?: return null
-            val fileName = "${title}_${dateFormat.format(Date())}.csv"
-            val file = File(dir, fileName)
-
-            FileWriter(file).use { writer ->
-                writer.write("﻿")
-                writer.write("建筑声学计算器 - $title\n")
-                writer.write("导出时间,${displayDateFormat.format(Date())}\n")
-                writer.write("版本,${AppVersion.DISPLAY}\n\n")
-
-                // Headers
-                writer.write(headers.joinToString(",") { "\"$it\"" } + "\n")
-
-                // Data rows
-                dataRows.forEach { row ->
-                    writer.write(row.joinToString(",") { "\"$it\"" } + "\n")
-                }
+            val fileName = "${sanitizeFileName(title)}_${dateFormat.format(Date())}.csv"
+            val csvContent = buildResultCsv(title, headers, dataRows)
+            if (Build.VERSION.SDK_INT >= 29) {
+                saveToPublicDownloads(context, fileName, "text/csv", csvContent)
+            } else {
+                saveToLegacyDownloads(context, fileName, csvContent)
             }
-
-            notifyFileScan(context, file)
-            file.absolutePath
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -95,14 +68,12 @@ object ExportUtils {
      */
     suspend fun exportTextReport(context: Context, title: String, content: String): String? {
         return try {
-            val dir = getExportDir(context) ?: return null
-            val fileName = "${title}_${dateFormat.format(Date())}.txt"
-            val file = File(dir, fileName)
-
-            file.writeText(content, Charsets.UTF_8)
-            notifyFileScan(context, file)
-
-            file.absolutePath
+            val fileName = "${sanitizeFileName(title)}_${dateFormat.format(Date())}.txt"
+            if (Build.VERSION.SDK_INT >= 29) {
+                saveToPublicDownloads(context, fileName, "text/plain", content)
+            } else {
+                saveToLegacyDownloads(context, fileName, content)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -110,26 +81,21 @@ object ExportUtils {
     }
 
     /**
-     * 分享文件
+     * 分享文件（直接弹出系统分享菜单）
      */
     fun shareFile(context: Context, filePath: String, mimeType: String = "*/*") {
         try {
             val file = File(filePath)
             if (!file.exists()) return
-
             val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
+                context, "${context.packageName}.fileprovider", file
             )
-
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = mimeType
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-
             context.startActivity(Intent.createChooser(intent, "分享文件"))
         } catch (e: Exception) {
             e.printStackTrace()
@@ -137,32 +103,125 @@ object ExportUtils {
     }
 
     /**
-     * 获取导出目录（外部存储 Downloads 目录）
+     * 直接分享文本内容（不用先存文件）
      */
-    private fun getExportDir(context: Context): File? {
-        val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-            ?: File(context.filesDir, "exports")
-        if (!dir.exists()) dir.mkdirs()
-        return dir
+    fun shareText(context: Context, title: String, text: String) {
+        try {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, title)
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            context.startActivity(Intent.createChooser(intent, "分享到"))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // ======================== 构建文件内容 ========================
+
+    private fun buildProjectCsv(project: Project): String {
+        val sb = StringBuilder()
+        sb.append("﻿") // BOM for Excel UTF-8
+        sb.appendLine("建筑声学计算器 - 项目导出")
+        sb.appendLine("导出时间,${displayDateFormat.format(Date())}")
+        sb.appendLine("版本,${AppVersion.DISPLAY}")
+        sb.appendLine()
+        sb.appendLine("项目名称,${project.name}")
+        sb.appendLine("项目类型,${project.projectType}")
+        sb.appendLine("描述,${project.description}")
+        sb.appendLine("创建时间,${displayDateFormat.format(Date(project.createdAt))}")
+        sb.appendLine("更新时间,${displayDateFormat.format(Date(project.updatedAt))}")
+        sb.appendLine("标签,${project.tags.joinToString(";")}")
+        return sb.toString()
+    }
+
+    private fun buildResultCsv(title: String, headers: List<String>, dataRows: List<List<String>>): String {
+        val sb = StringBuilder()
+        sb.append("﻿")
+        sb.appendLine("建筑声学计算器 - $title")
+        sb.appendLine("导出时间,${displayDateFormat.format(Date())}")
+        sb.appendLine("版本,${AppVersion.DISPLAY}")
+        sb.appendLine()
+        sb.appendLine(headers.joinToString(",") { "\"$it\"" })
+        dataRows.forEach { row ->
+            sb.appendLine(row.joinToString(",") { "\"$it\"" })
+        }
+        return sb.toString()
+    }
+
+    // ======================== 保存到公共目录（Android 10+） ========================
+
+    /**
+     * Android 10+ (API 29+)：使用 MediaStore 存到「下载」文件夹
+     * 用户在任何文件管理器都能看到
+     */
+    private fun saveToPublicDownloads(
+        context: Context,
+        fileName: String,
+        mimeType: String,
+        content: String
+    ): String? {
+        val contentValues = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+            put(MediaStore.Downloads.MIME_TYPE, mimeType)
+            put(MediaStore.Downloads.DATE_ADDED, System.currentTimeMillis() / 1000)
+            put(MediaStore.Downloads.DATE_MODIFIED, System.currentTimeMillis() / 1000)
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        }
+
+        val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            ?: return null
+
+        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+            outputStream.write(content.toByteArray(Charsets.UTF_8))
+            outputStream.flush()
+        }
+
+        return uri.toString()
     }
 
     /**
-     * 通知系统媒体库扫描文件
+     * Android 9 及以下：直接写公共 Downloads 目录
      */
-    private fun notifyFileScan(context: Context, file: File) {
+    private fun saveToLegacyDownloads(
+        context: Context,
+        fileName: String,
+        content: String
+    ): String? {
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!dir.exists()) dir.mkdirs()
+        val file = File(dir, fileName)
+        FileOutputStream(file).use { output ->
+            output.write(content.toByteArray(Charsets.UTF_8))
+            output.flush()
+        }
+        // 通知系统扫描
         try {
             val intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).apply {
                 data = android.net.Uri.fromFile(file)
             }
             context.sendBroadcast(intent)
-        } catch (e: Exception) {
-            // 非关键操作
-        }
+        } catch (_: Exception) {}
+        return file.absolutePath
     }
 
     /**
-     * 格式化时间戳
+     * 返回导出文件所在目录的路径描述（用于界面显示）
      */
+    fun getExportPathDescription(): String {
+        return if (Build.VERSION.SDK_INT >= 29) {
+            "手机存储/Download/"
+        } else {
+            "手机存储/Download/"
+        }
+    }
+
+    private fun sanitizeFileName(name: String): String {
+        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            .take(30)
+    }
+
     fun formatTimestamp(timestamp: Long): String {
         return displayDateFormat.format(Date(timestamp))
     }
