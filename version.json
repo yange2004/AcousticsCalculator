@@ -1,6 +1,6 @@
 {
   "versionCode": "4",
   "versionName": "2.2.0",
-  "downloadUrl": "https://raw.githubusercontent.com/yange2004/AcousticsCalculator/master/%E5%BB%BA%E7%AD%91%E5%A3%B0%E5%AD%A6%E8%AE%A1%E7%AE%97%E5%99%A8.apk",
-  "releaseNotes": "v2.2.0 更新内容：\n1. 项目系统增强：创建项目时可选择类型\n2. 新增导出功能：CSV导出（Excel可打开）\n3. 版本统一：所有界面统一版本显示\n4. 主页登录/登出：首页可直接登录退出\n5. 全界面霓虹主题统一\n6. 项目搜索与分享"
+  "downloadUrl": "https://cdn.jsdelivr.net/gh/yange2004/AcousticsCalculator@master/%E5%BB%BA%E7%AD%91%E5%A3%B0%E5%AD%A6%E8%AE%A1%E7%AE%97%E5%99%A8.apk",
+  "releaseNotes": "v2.2.0 更新内容：\n1. ⚡ 多CDN加速下载（jsDelivr+GitHub+国内镜像）\n2. 项目系统增强：创建项目时可选择类型\n3. 新增导出功能：CSV导出（Excel可打开）\n4. 版本统一：所有界面统一版本显示\n5. 主页登录/登出：首页可直接登录退出\n6. 全界面霓虹主题统一\n7. 项目搜索与分享"
 }

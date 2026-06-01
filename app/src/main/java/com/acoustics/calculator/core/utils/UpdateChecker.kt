@@ -21,25 +21,31 @@ object UpdateChecker {
     val CURRENT_VERSION_CODE: Int = AppVersion.CODE
     val CURRENT_VERSION_NAME: String = AppVersion.NAME
 
-    // ===== 远程版本信息地址 =====
+    // ===== 多 CDN 下载地址（按速度优先级排序） =====
     private const val GH_OWNER = "yange2004"
     private const val GH_REPO = "AcousticsCalculator"
+    private const val APK_FILE_NAME = "acoustics_calculator_update.apk"
 
-    // 主选：GitHub raw 直接获取 version.json（已验证可用，无缓存问题）
-    private val GITHUB_RAW_VERSION_URL = "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/version.json"
-    // 主选 APK 下载地址
-    private val GITHUB_RAW_APK_URL = "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/%E5%BB%BA%E7%AD%91%E5%A3%B0%E5%AD%A6%E8%AE%A1%E7%AE%97%E5%99%A8.apk"
+    // version.json 来源（哪个快用哪个）
+    private val VERSION_JSON_URLS = listOf(
+        "https://cdn.jsdelivr.net/gh/$GH_OWNER/$GH_REPO@master/version.json",
+        "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/version.json",
+        "https://ghproxy.net/https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/version.json",
+    )
 
-    // 备用：GitHub Releases API（需要先创建 Release）
-    private val GITHUB_RELEASES_URL = "https://api.github.com/repos/$GH_OWNER/$GH_REPO/releases/latest"
+    // APK 下载地址（按速度优先级排序）
+    private val APK_DOWNLOAD_URLS = listOf(
+        "https://cdn.jsdelivr.net/gh/$GH_OWNER/$GH_REPO@master/建筑声学计算器.apk",
+        "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/建筑声学计算器.apk",
+        "https://ghproxy.net/https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/建筑声学计算器.apk",
+        "https://github.com/$GH_OWNER/$GH_REPO/releases/download/v${AppVersion.NAME}/建筑声学计算器.apk",
+    )
 
-    // 最后手段：Gitee version.json（API 有缓存延迟）
+    // Gitee 回退（最后手段）
     private const val GITEE_OWNER = "yangyan2004"
     private const val GITEE_REPO = "acoustics-calculator"
     private const val ACCESS_TOKEN = "2fc834fb42f55b5f6c7ec15386cc238c"
     private val GITEE_API_URL = "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/contents/version.json?access_token=$ACCESS_TOKEN"
-
-    private const val APK_FILE_NAME = "acoustics_calculator_update.apk"
 
     /** 版本历史从 AppVersion 中心读取 */
     private val versionHistory = AppVersion.history.map { entry ->
@@ -47,33 +53,21 @@ object UpdateChecker {
     }
 
     /**
-     * 检查更新
-     * 第一优先：GitHub raw version.json（直接下载，无缓存，已验证可用）
-     * 第二优先：GitHub Releases API（需要创建 Release）
-     * 第三优先：Gitee API（有缓存延迟，最后手段）
+     * 检查更新 — 遍历多个 CDN 来源，哪个先返回有效数据就用哪个
      */
     suspend fun checkForUpdate(): UpdateResult = withContext(Dispatchers.IO) {
-        // 1. GitHub raw version.json（最快最可靠）
-        var networkVersion = fetchVersionFromGitHubRaw()
+        var networkVersion: VersionInfo? = null
 
-        // 2. 回退到 GitHub Releases API
-        if (networkVersion == null) {
-            networkVersion = fetchVersionFromGitHubRelease()
+        for (url in VERSION_JSON_URLS) {
+            networkVersion = fetchJsonFromUrl(url)
+            if (networkVersion != null) break
         }
 
-        // 3. 最后回退到 Gitee API
         if (networkVersion == null) {
             networkVersion = fetchVersionFromGiteeApi()
         }
 
         val hasUpdate = networkVersion != null && networkVersion.versionCode > CURRENT_VERSION_CODE
-
-        // 如果有更新但没拿到下载地址，用默认的 GitHub raw APK 地址
-        val finalDownloadUrl = if (networkVersion?.downloadUrl?.isBlank() == true || networkVersion == null) {
-            GITHUB_RAW_APK_URL
-        } else {
-            networkVersion.downloadUrl
-        }
 
         UpdateResult(
             hasUpdate = hasUpdate,
@@ -81,7 +75,7 @@ object UpdateChecker {
             currentVersionName = CURRENT_VERSION_NAME,
             latestVersionName = networkVersion?.versionName ?: CURRENT_VERSION_NAME,
             latestVersionCode = networkVersion?.versionCode ?: CURRENT_VERSION_CODE,
-            downloadUrl = finalDownloadUrl,
+            downloadUrl = networkVersion?.downloadUrl ?: "",
             releaseNotes = if (hasUpdate) (networkVersion?.notes ?: "新版本已可用")
             else "当前已是最新版本（$CURRENT_VERSION_NAME）",
             versionHistory = versionHistory
@@ -89,74 +83,20 @@ object UpdateChecker {
     }
 
     /**
-     * 直接从 GitHub raw 下载 version.json（最可靠的方式）
-     * GitHub raw 的 CDN 无缓存问题，且无需任何鉴权
+     * 从指定 URL 获取 version.json（3 秒超时）
      */
-    private fun fetchVersionFromGitHubRaw(): VersionInfo? {
+    private fun fetchJsonFromUrl(url: String): VersionInfo? {
         return try {
-            val conn = URL(GITHUB_RAW_VERSION_URL).openConnection() as HttpURLConnection
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
+            val conn = URL(url).openConnection() as HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+            conn.setRequestProperty("User-Agent", "AcousticsCalculator/2.2.0")
             conn.connect()
-
             if (conn.responseCode == 200) {
                 val json = conn.inputStream.bufferedReader().use { it.readText() }
                 conn.disconnect()
-                val info = parseVersionJson(json)
-                // GitHub raw 返回 JSON，下载 URL 用默认的 GitHub raw APK
-                if (info != null) {
-                    info.copy(downloadUrl = GITHUB_RAW_APK_URL)
-                } else null
-            } else {
-                conn.disconnect()
-                null
-            }
-        } catch (_: Exception) { null }
-    }
-
-    /**
-     * 从 GitHub Releases API 获取最新版本
-     * 需要先在 GitHub 上创建 Release，否则返回 404 会静默回退
-     */
-    private fun fetchVersionFromGitHubRelease(): VersionInfo? {
-        return try {
-            val conn = URL(GITHUB_RELEASES_URL).openConnection() as HttpURLConnection
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("Accept", "application/json")
-            conn.connect()
-
-            if (conn.responseCode == 200) {
-                val responseJson = conn.inputStream.bufferedReader().use { it.readText() }
-                conn.disconnect()
-
-                val jsonObj = org.json.JSONObject(responseJson)
-                val tagName = jsonObj.optString("tag_name", "")
-                val body = jsonObj.optString("body", "")
-
-                val versionName = tagName.removePrefix("v")
-                val versionCode = parseVersionCode(versionName) ?: return null
-
-                // 在 release assets 中找 .apk
-                val assets = jsonObj.optJSONArray("assets")
-                var downloadUrl = ""
-                if (assets != null) {
-                    for (i in 0 until assets.length()) {
-                        val asset = assets.getJSONObject(i)
-                        val name = asset.optString("name", "")
-                        if (name.endsWith(".apk")) {
-                            downloadUrl = asset.optString("browser_download_url", "")
-                            break
-                        }
-                    }
-                }
-
-                VersionInfo(versionCode, tagName, body, downloadUrl)
-            } else {
-                conn.disconnect()
-                null
-            }
+                parseVersionJson(json)
+            } else { conn.disconnect(); null }
         } catch (_: Exception) { null }
     }
 
@@ -238,13 +178,13 @@ object UpdateChecker {
 
     /**
      * 从网络下载APK更新包
+     * 自动遍历多个 CDN 源，哪个能下载用哪个（智能容灾）
      */
     suspend fun downloadUpdate(
         context: Context,
         downloadUrl: String = "",
         onProgress: (Float) -> Unit = {}
     ): File? = withContext(Dispatchers.IO) {
-        var connection: HttpURLConnection? = null
         try {
             val destDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
                 ?: return@withContext null
@@ -252,23 +192,59 @@ object UpdateChecker {
             val destFile = File(destDir, APK_FILE_NAME)
             if (destFile.exists()) destFile.delete()
 
-            val fallbackUrl = GITHUB_RAW_APK_URL
-            val url = downloadUrl.ifBlank { fallbackUrl }
+            // 构建待尝试的 URL 列表
+            val urlsToTry = mutableListOf<String>()
+            if (downloadUrl.isNotBlank()) urlsToTry.add(downloadUrl)
+            urlsToTry.addAll(APK_DOWNLOAD_URLS)
+
+            var lastError: String? = null
+
+            for (url in urlsToTry) {
+                try {
+                    val result = tryDownloadFromUrl(url, destFile, onProgress)
+                    if (result) {
+                        if (destFile.exists() && destFile.length() > 0) return@withContext destFile
+                    }
+                } catch (e: Exception) {
+                    lastError = "${e.message}"
+                    continue
+                }
+            }
+
+            android.util.Log.e("UpdateChecker", "All download sources failed: $lastError")
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /** 从单个 URL 下载 APK */
+    private fun tryDownloadFromUrl(
+        url: String,
+        destFile: File,
+        onProgress: (Float) -> Unit
+    ): Boolean {
+        var connection: HttpURLConnection? = null
+        return try {
             connection = URL(url).openConnection() as HttpURLConnection
-            connection.connectTimeout = 15000
+            connection.connectTimeout = 10000
             connection.readTimeout = 30000
+            connection.setRequestProperty("User-Agent", "AcousticsCalculator/2.2.0")
+            connection.instanceFollowRedirects = true
             connection.connect()
 
-            if (connection.responseCode != 200) {
+            val responseCode = connection.responseCode
+            if (responseCode != 200 && responseCode != 206) {
                 connection.disconnect()
-                return@withContext null
+                return false
             }
 
             val totalBytes = connection.contentLengthLong
             val inputStream = connection.inputStream
 
             FileOutputStream(destFile).use { output ->
-                val buffer = ByteArray(64 * 1024) // 64KB
+                val buffer = ByteArray(64 * 1024)
                 var totalRead = 0L
                 var bytesRead: Int
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
@@ -276,8 +252,10 @@ object UpdateChecker {
                     totalRead += bytesRead
                     if (totalBytes > 0) {
                         val progress = (totalRead.toFloat() / totalBytes.toFloat()).coerceAtMost(1f)
-                        kotlinx.coroutines.runBlocking {
-                            withContext(Dispatchers.Main) { onProgress(progress) }
+                        if ((progress * 100).toInt() % 2 == 0) {
+                            kotlinx.coroutines.runBlocking {
+                                withContext(Dispatchers.Main) { onProgress(progress) }
+                            }
                         }
                     }
                 }
@@ -286,12 +264,10 @@ object UpdateChecker {
 
             inputStream.close()
             connection.disconnect()
-
-            if (destFile.exists() && destFile.length() > 0) destFile else null
+            true
         } catch (e: Exception) {
-            e.printStackTrace()
             connection?.disconnect()
-            null
+            throw e
         }
     }
 
