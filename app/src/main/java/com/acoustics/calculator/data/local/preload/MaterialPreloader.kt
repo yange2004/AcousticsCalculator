@@ -9,6 +9,7 @@ import com.acoustics.calculator.data.local.entity.MaterialCategoryEntity
 import com.acoustics.calculator.data.local.entity.MaterialEntity
 import com.acoustics.calculator.data.local.entity.StandardEntity
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -198,19 +199,19 @@ class MaterialPreloader @Inject constructor(
 
     // JSON DTO for parsing materials from JSON
     data class MaterialJsonDto(
-        val nameZh: String,
-        val nameEn: String,
-        val categoryId: Long,
-        val description: String = "",
-        val densityKgm3: Double? = null,
-        val thicknessMm: Double? = null,
-        val absorption125: Double,
-        val absorption250: Double,
-        val absorption500: Double,
-        val absorption1000: Double,
-        val absorption2000: Double,
-        val absorption4000: Double,
-        val source: String = ""
+        @SerializedName("nameZh") val nameZh: String,
+        @SerializedName("nameEn") val nameEn: String,
+        @SerializedName("categoryId") val categoryId: Long,
+        @SerializedName("description") val description: String = "",
+        @SerializedName("densityKgm3") val densityKgm3: Double? = null,
+        @SerializedName("thicknessMm") val thicknessMm: Double? = null,
+        @SerializedName("absorption125") val absorption125: Double,
+        @SerializedName("absorption250") val absorption250: Double,
+        @SerializedName("absorption500") val absorption500: Double,
+        @SerializedName("absorption1000") val absorption1000: Double,
+        @SerializedName("absorption2000") val absorption2000: Double,
+        @SerializedName("absorption4000") val absorption4000: Double,
+        @SerializedName("source") val source: String = ""
     ) {
         fun toEntity(): MaterialEntity {
             val nrc = listOf(absorption250, absorption500, absorption1000, absorption2000).average()

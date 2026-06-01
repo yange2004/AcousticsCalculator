@@ -4,3 +4,4 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 -keep class com.acoustics.calculator.data.local.entity.** { *; }
+-keep class com.acoustics.calculator.data.local.preload.MaterialPreloader$MaterialJsonDto { *; }
