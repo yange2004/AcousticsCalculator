@@ -21,18 +21,23 @@ object UpdateChecker {
     val CURRENT_VERSION_CODE: Int = AppVersion.CODE
     val CURRENT_VERSION_NAME: String = AppVersion.NAME
 
-    // ===== 远程版本信息地址（GitHub Releases API 主选 + Gitee 回退） =====
-    // GitHub Releases（无鉴权、速度快、CDN优秀）
+    // ===== 远程版本信息地址 =====
     private const val GH_OWNER = "yange2004"
     private const val GH_REPO = "AcousticsCalculator"
+
+    // 主选：GitHub raw 直接获取 version.json（已验证可用，无缓存问题）
+    private val GITHUB_RAW_VERSION_URL = "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/version.json"
+    // 主选 APK 下载地址
+    private val GITHUB_RAW_APK_URL = "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/%E5%BB%BA%E7%AD%91%E5%A3%B0%E5%AD%A6%E8%AE%A1%E7%AE%97%E5%99%A8.apk"
+
+    // 备用：GitHub Releases API（需要先创建 Release）
     private val GITHUB_RELEASES_URL = "https://api.github.com/repos/$GH_OWNER/$GH_REPO/releases/latest"
 
-    // Gitee 回退方案
+    // 最后手段：Gitee version.json（API 有缓存延迟）
     private const val GITEE_OWNER = "yangyan2004"
     private const val GITEE_REPO = "acoustics-calculator"
     private const val ACCESS_TOKEN = "2fc834fb42f55b5f6c7ec15386cc238c"
-    // Gitee version.json 文件方式（回退）
-    private val VERSION_CHECK_URL = "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/contents/version.json?access_token=$ACCESS_TOKEN"
+    private val GITEE_API_URL = "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/contents/version.json?access_token=$ACCESS_TOKEN"
 
     private const val APK_FILE_NAME = "acoustics_calculator_update.apk"
 
@@ -42,17 +47,33 @@ object UpdateChecker {
     }
 
     /**
-     * 检查更新：优先使用 GitHub Releases API，回退到 Gitee version.json
+     * 检查更新
+     * 第一优先：GitHub raw version.json（直接下载，无缓存，已验证可用）
+     * 第二优先：GitHub Releases API（需要创建 Release）
+     * 第三优先：Gitee API（有缓存延迟，最后手段）
      */
     suspend fun checkForUpdate(): UpdateResult = withContext(Dispatchers.IO) {
-        // 先尝试 GitHub Releases API
-        var networkVersion = tryFetchVersionFromGitHub()
-        // 回退到 Gitee 的 version.json 文件方式
+        // 1. GitHub raw version.json（最快最可靠）
+        var networkVersion = fetchVersionFromGitHubRaw()
+
+        // 2. 回退到 GitHub Releases API
         if (networkVersion == null) {
-            networkVersion = tryFetchVersionFromApi()
+            networkVersion = fetchVersionFromGitHubRelease()
+        }
+
+        // 3. 最后回退到 Gitee API
+        if (networkVersion == null) {
+            networkVersion = fetchVersionFromGiteeApi()
         }
 
         val hasUpdate = networkVersion != null && networkVersion.versionCode > CURRENT_VERSION_CODE
+
+        // 如果有更新但没拿到下载地址，用默认的 GitHub raw APK 地址
+        val finalDownloadUrl = if (networkVersion?.downloadUrl?.isBlank() == true || networkVersion == null) {
+            GITHUB_RAW_APK_URL
+        } else {
+            networkVersion.downloadUrl
+        }
 
         UpdateResult(
             hasUpdate = hasUpdate,
@@ -60,7 +81,7 @@ object UpdateChecker {
             currentVersionName = CURRENT_VERSION_NAME,
             latestVersionName = networkVersion?.versionName ?: CURRENT_VERSION_NAME,
             latestVersionCode = networkVersion?.versionCode ?: CURRENT_VERSION_CODE,
-            downloadUrl = networkVersion?.downloadUrl ?: "",
+            downloadUrl = finalDownloadUrl,
             releaseNotes = if (hasUpdate) (networkVersion?.notes ?: "新版本已可用")
             else "当前已是最新版本（$CURRENT_VERSION_NAME）",
             versionHistory = versionHistory
@@ -68,10 +89,36 @@ object UpdateChecker {
     }
 
     /**
-     * 从 GitHub Releases API 获取最新版本
-     * 无需鉴权，返回 release 中第一个 .apk 附件
+     * 直接从 GitHub raw 下载 version.json（最可靠的方式）
+     * GitHub raw 的 CDN 无缓存问题，且无需任何鉴权
      */
-    private fun tryFetchVersionFromGitHub(): VersionInfo? {
+    private fun fetchVersionFromGitHubRaw(): VersionInfo? {
+        return try {
+            val conn = URL(GITHUB_RAW_VERSION_URL).openConnection() as HttpURLConnection
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
+            conn.connect()
+
+            if (conn.responseCode == 200) {
+                val json = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+                val info = parseVersionJson(json)
+                // GitHub raw 返回 JSON，下载 URL 用默认的 GitHub raw APK
+                if (info != null) {
+                    info.copy(downloadUrl = GITHUB_RAW_APK_URL)
+                } else null
+            } else {
+                conn.disconnect()
+                null
+            }
+        } catch (_: Exception) { null }
+    }
+
+    /**
+     * 从 GitHub Releases API 获取最新版本
+     * 需要先在 GitHub 上创建 Release，否则返回 404 会静默回退
+     */
+    private fun fetchVersionFromGitHubRelease(): VersionInfo? {
         return try {
             val conn = URL(GITHUB_RELEASES_URL).openConnection() as HttpURLConnection
             conn.connectTimeout = 8000
@@ -85,10 +132,9 @@ object UpdateChecker {
                 conn.disconnect()
 
                 val jsonObj = org.json.JSONObject(responseJson)
-                val tagName = jsonObj.optString("tag_name", "") // e.g. "v2.2.0"
+                val tagName = jsonObj.optString("tag_name", "")
                 val body = jsonObj.optString("body", "")
 
-                // 从 tag 解析 versionCode
                 val versionName = tagName.removePrefix("v")
                 val versionCode = parseVersionCode(versionName) ?: return null
 
@@ -104,11 +150,6 @@ object UpdateChecker {
                             break
                         }
                     }
-                }
-
-                if (downloadUrl.isBlank()) {
-                    // 尝试标准 GitHub release 下载 URL
-                    downloadUrl = "https://github.com/$GH_OWNER/$GH_REPO/releases/download/$tagName/建筑声学计算器.apk"
                 }
 
                 VersionInfo(versionCode, tagName, body, downloadUrl)
@@ -133,20 +174,19 @@ object UpdateChecker {
     }
 
     /**
-     * 从 version.json 文件获取版本信息（回退方案）
+     * 从 Gitee API 获取 version.json（最后手段，有缓存延迟）
      */
-    private fun tryFetchVersionFromApi(): VersionInfo? {
+    private fun fetchVersionFromGiteeApi(): VersionInfo? {
         return try {
-            val conn = URL(VERSION_CHECK_URL).openConnection() as HttpURLConnection
+            val conn = URL(GITEE_API_URL).openConnection() as HttpURLConnection
             conn.connectTimeout = 8000
             conn.readTimeout = 8000
-            conn.requestMethod = "GET"
             conn.connect()
 
             if (conn.responseCode == 200) {
                 val responseJson = conn.inputStream.bufferedReader().use { it.readText() }
                 conn.disconnect()
-                // 从API响应中提取base64编码的内容
+                // Gitee API 返回 base64 编码的内容
                 val contentField = "\"content\":"
                 val contentStart = responseJson.indexOf(contentField)
                 if (contentStart < 0) return null
@@ -155,7 +195,6 @@ object UpdateChecker {
                 if (quote1 < 0 || quote2 <= quote1) return null
                 val base64Content = responseJson.substring(quote1 + 1, quote2)
                     .replace("\\n", "").replace("\n", "")
-                // Base64解码
                 val decodedBytes = android.util.Base64.decode(base64Content, android.util.Base64.DEFAULT)
                 val decodedJson = String(decodedBytes, Charsets.UTF_8)
                 parseVersionJson(decodedJson)
@@ -207,7 +246,7 @@ object UpdateChecker {
             val destFile = File(destDir, APK_FILE_NAME)
             if (destFile.exists()) destFile.delete()
 
-            val fallbackUrl = "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/建筑声学计算器.apk"
+            val fallbackUrl = GITHUB_RAW_APK_URL
             val url = downloadUrl.ifBlank { fallbackUrl }
             connection = URL(url).openConnection() as HttpURLConnection
             connection.connectTimeout = 15000
