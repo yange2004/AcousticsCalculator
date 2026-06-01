@@ -21,16 +21,18 @@ object UpdateChecker {
     val CURRENT_VERSION_CODE: Int = AppVersion.CODE
     val CURRENT_VERSION_NAME: String = AppVersion.NAME
 
-    // ===== 远程版本信息地址（Gitee API + Releases） =====
+    // ===== 远程版本信息地址（GitHub Releases API 主选 + Gitee 回退） =====
+    // GitHub Releases（无鉴权、速度快、CDN优秀）
+    private const val GH_OWNER = "yange2004"
+    private const val GH_REPO = "AcousticsCalculator"
+    private val GITHUB_RELEASES_URL = "https://api.github.com/repos/$GH_OWNER/$GH_REPO/releases/latest"
+
+    // Gitee 回退方案
     private const val GITEE_OWNER = "yangyan2004"
     private const val GITEE_REPO = "acoustics-calculator"
-    private const val GITEE_BRANCH = "master"
     private const val ACCESS_TOKEN = "2fc834fb42f55b5f6c7ec15386cc238c"
-
-    // 使用 Gitee API 获取文件内容（base64 编码，需解码）
-    private val VERSION_CHECK_URL = "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/contents/version.json?access_token=$ACCESS_TOKEN&ref=$GITEE_BRANCH"
-    // APK 通过 raw 下载（使用 Token 鉴权）
-    private val APK_DOWNLOAD_URL = "https://gitee.com/$GITEE_OWNER/$GITEE_REPO/raw/$GITEE_BRANCH/建筑声学计算器.apk?access_token=$ACCESS_TOKEN"
+    // Gitee version.json 文件方式（回退）
+    private val VERSION_CHECK_URL = "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/contents/version.json?access_token=$ACCESS_TOKEN"
 
     private const val APK_FILE_NAME = "acoustics_calculator_update.apk"
 
@@ -40,10 +42,16 @@ object UpdateChecker {
     }
 
     /**
-     * 检查更新：从Gitee获取最新版本信息
+     * 检查更新：优先使用 GitHub Releases API，回退到 Gitee version.json
      */
     suspend fun checkForUpdate(): UpdateResult = withContext(Dispatchers.IO) {
-        val networkVersion = tryFetchVersionFromApi()
+        // 先尝试 GitHub Releases API
+        var networkVersion = tryFetchVersionFromGitHub()
+        // 回退到 Gitee 的 version.json 文件方式
+        if (networkVersion == null) {
+            networkVersion = tryFetchVersionFromApi()
+        }
+
         val hasUpdate = networkVersion != null && networkVersion.versionCode > CURRENT_VERSION_CODE
 
         UpdateResult(
@@ -60,8 +68,72 @@ object UpdateChecker {
     }
 
     /**
-     * 从Gitee API获取最新版本信息
-     * API返回base64编码的文件内容，需要解码后解析JSON
+     * 从 GitHub Releases API 获取最新版本
+     * 无需鉴权，返回 release 中第一个 .apk 附件
+     */
+    private fun tryFetchVersionFromGitHub(): VersionInfo? {
+        return try {
+            val conn = URL(GITHUB_RELEASES_URL).openConnection() as HttpURLConnection
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("Accept", "application/json")
+            conn.connect()
+
+            if (conn.responseCode == 200) {
+                val responseJson = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+
+                val jsonObj = org.json.JSONObject(responseJson)
+                val tagName = jsonObj.optString("tag_name", "") // e.g. "v2.2.0"
+                val body = jsonObj.optString("body", "")
+
+                // 从 tag 解析 versionCode
+                val versionName = tagName.removePrefix("v")
+                val versionCode = parseVersionCode(versionName) ?: return null
+
+                // 在 release assets 中找 .apk
+                val assets = jsonObj.optJSONArray("assets")
+                var downloadUrl = ""
+                if (assets != null) {
+                    for (i in 0 until assets.length()) {
+                        val asset = assets.getJSONObject(i)
+                        val name = asset.optString("name", "")
+                        if (name.endsWith(".apk")) {
+                            downloadUrl = asset.optString("browser_download_url", "")
+                            break
+                        }
+                    }
+                }
+
+                if (downloadUrl.isBlank()) {
+                    // 尝试标准 GitHub release 下载 URL
+                    downloadUrl = "https://github.com/$GH_OWNER/$GH_REPO/releases/download/$tagName/建筑声学计算器.apk"
+                }
+
+                VersionInfo(versionCode, tagName, body, downloadUrl)
+            } else {
+                conn.disconnect()
+                null
+            }
+        } catch (_: Exception) { null }
+    }
+
+    /** 从版本名（如 "2.2.0"）解析 versionCode */
+    private fun parseVersionCode(versionName: String): Int? {
+        val parts = versionName.split(".").take(3)
+        if (parts.size < 3) return null
+        return when {
+            parts[0] == "2" && parts[1] == "2" && parts[2] == "0" -> 4
+            parts[0] == "2" && parts[1] == "1" && parts[2] == "1" -> 3
+            parts[0] == "2" && parts[1] == "0" && parts[2] == "0" -> 2
+            parts[0] == "1" && parts[1] == "0" && parts[2] == "0" -> 1
+            else -> null
+        }
+    }
+
+    /**
+     * 从 version.json 文件获取版本信息（回退方案）
      */
     private fun tryFetchVersionFromApi(): VersionInfo? {
         return try {
@@ -135,7 +207,8 @@ object UpdateChecker {
             val destFile = File(destDir, APK_FILE_NAME)
             if (destFile.exists()) destFile.delete()
 
-            val url = downloadUrl.ifBlank { APK_DOWNLOAD_URL }
+            val fallbackUrl = "https://raw.githubusercontent.com/$GH_OWNER/$GH_REPO/master/建筑声学计算器.apk"
+            val url = downloadUrl.ifBlank { fallbackUrl }
             connection = URL(url).openConnection() as HttpURLConnection
             connection.connectTimeout = 15000
             connection.readTimeout = 30000
