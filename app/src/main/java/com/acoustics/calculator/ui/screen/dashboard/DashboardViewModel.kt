@@ -16,7 +16,7 @@ data class DashboardUiState(
     val recentProjects: List<Project> = emptyList(),
     val materialCount: Int = 0,
     val currentUser: UserEntity? = null,
-    val showLoginSheet: Boolean = false
+    val isLoggedIn: Boolean = false
 )
 
 @HiltViewModel
@@ -46,22 +46,25 @@ class DashboardViewModel @Inject constructor(
     private fun loadCurrentUser() {
         viewModelScope.launch {
             val user = userDao.getCurrentUser()
-            _uiState.update { it.copy(currentUser = user) }
+            _uiState.update {
+                it.copy(
+                    currentUser = user,
+                    isLoggedIn = user != null
+                )
+            }
         }
     }
 
-    fun showLogin() { _uiState.update { it.copy(showLoginSheet = true) } }
-    fun hideLogin() { _uiState.update { it.copy(showLoginSheet = false) } }
-
-    fun onLoginSuccess() {
+    fun refreshUser() {
         loadCurrentUser()
-        _uiState.update { it.copy(showLoginSheet = false) }
     }
 
     fun logout() {
         viewModelScope.launch {
             userDao.logoutAll()
-            _uiState.update { it.copy(currentUser = null) }
+            _uiState.update {
+                it.copy(currentUser = null, isLoggedIn = false)
+            }
         }
     }
 }

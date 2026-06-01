@@ -10,66 +10,79 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val LightColorScheme = lightColorScheme(
-    primary = Blue600,
-    onPrimary = Color.White,
-    primaryContainer = Blue100,
-    onPrimaryContainer = Blue800,
-    secondary = Teal500,
-    onSecondary = Color.White,
-    secondaryContainer = Teal100,
-    onSecondaryContainer = Teal700,
-    tertiary = AccentPurple,
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFE1BEE7),
-    onTertiaryContainer = AccentPurple,
-    background = Gray50,
-    onBackground = Gray900,
-    surface = Color.White,
-    onSurface = Gray900,
-    surfaceVariant = Gray100,
-    onSurfaceVariant = Gray600,
-    outline = Gray400,
-    outlineVariant = Gray300,
-    error = NonCompliantRed,
-    onError = Color.White,
-    errorContainer = NonCompliantRedBg,
-    onErrorContainer = NonCompliantRed,
-    inversePrimary = Blue100,
-    inverseSurface = Gray800,
-    inverseOnSurface = Gray50
-)
+// ===================================================================
+// 🎨 V2.0 DARK MODE FIRST — Cyberpunk / Neon / Glassmorphism
+// The light theme is kept for accessibility but the app shines in dark mode
+// ===================================================================
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Blue100,
-    onPrimary = Blue800,
-    primaryContainer = Blue600,
-    onPrimaryContainer = Blue50,
-    secondary = Teal100,
-    onSecondary = Teal700,
-    secondaryContainer = Teal600,
-    onSecondaryContainer = Color.White,
-    tertiary = Color(0xFFCE93D8),
-    onTertiary = AccentPurple,
-    tertiaryContainer = AccentPurple,
-    onTertiaryContainer = Color(0xFFE1BEE7),
-    background = Gray900,
-    onBackground = Gray50,
-    surface = Gray800,
-    onSurface = Gray50,
-    surfaceVariant = Gray800,
-    onSurfaceVariant = Gray400,
-    outline = Gray600,
-    outlineVariant = Gray700,
-    error = NonCompliantRed,
+    primary = NeonCyan,
+    onPrimary = DeepBlue,
+    primaryContainer = Color(0xFF003544),
+    onPrimaryContainer = Color(0xFF4DB8FF), // NeonCyanLight
+    secondary = NeonPink,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFF3A0020),
+    onSecondaryContainer = NeonPinkLight,
+    tertiary = NeonPurple,
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFF2D0040),
+    onTertiaryContainer = NeonPurpleLight,
+    background = Color(0xFF0A0A0F),
+    onBackground = Color(0xFFE8E8F0),
+    surface = SurfaceDark,
+    onSurface = Color(0xFFE8E8F0),
+    surfaceVariant = SurfaceLight,
+    onSurfaceVariant = Color(0xFFB0B0C0),
+    outline = Color(0xFF3A3A5C),
+    outlineVariant = Color(0xFF2A2A4C),
+    error = NeonRed,
     onError = Color.White,
-    errorContainer = NonCompliantRedBg,
-    onErrorContainer = NonCompliantRed
+    errorContainer = Color(0xFF4A0010),
+    onErrorContainer = NeonRed,
+    inversePrimary = Color(0xFF006080),
+    inverseSurface = Color(0xFFE8E8F0),
+    inverseOnSurface = Color(0xFF0A0A0F),
+    surfaceTint = NeonCyan,
+    scrim = Color(0xCC0A0A0F)
+)
+
+private val LightColorScheme = lightColorScheme(
+    primary = Color(0xFF006080),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFC2E8FF),
+    onPrimaryContainer = Color(0xFF001E2A),
+    secondary = Color(0xFFA0005C),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFFFD9E6),
+    onSecondaryContainer = Color(0xFF3A0020),
+    tertiary = Color(0xFF7A00B0),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFF0D9FF),
+    onTertiaryContainer = Color(0xFF2D0040),
+    background = Color(0xFFF8F8FF),
+    onBackground = Color(0xFF1A1A2E),
+    surface = Color.White,
+    onSurface = Color(0xFF1A1A2E),
+    surfaceVariant = Color(0xFFE0E0F0),
+    onSurfaceVariant = Color(0xFF4A4A5C),
+    outline = Color(0xFF74748C),
+    outlineVariant = Color(0xFFC4C4D8),
+    error = Color(0xFFBA1A1A),
+    onError = Color.White,
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
+    inversePrimary = Color(0xFF83CFFF),
+    inverseSurface = Color(0xFF1A1A2E),
+    inverseOnSurface = Color(0xFFF0F0F8),
+    surfaceTint = Color(0xFF006080),
+    scrim = Color(0xCCF8F8FF)
 )
 
 @Composable
 fun AcousticTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
@@ -78,8 +91,8 @@ fun AcousticTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            window.statusBarColor = Color.Transparent.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
         }
     }
 

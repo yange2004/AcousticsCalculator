@@ -1,0 +1,6 @@
+{
+  "versionCode": 4,
+  "versionName": "2.2.0",
+  "downloadUrl": "https://gitee.com/yangyan2004/acoustics-calculator/raw/master/%E5%BB%BA%E7%AD%91%E5%A3%B0%E5%AD%A6%E8%AE%A1%E7%AE%97%E5%99%A8.apk",
+  "releaseNotes": "v2.2.0 更新内容：\n1. 项目系统增强：创建项目时可选择类型（室内声学/隔声/噪声/消声器）\n2. 新增导出功能：计算结果可导出为CSV文件（Excel可打开）\n3. 版本统一：所有界面版本号统一从中心读取\n4. 主页登录/登出：首页可直接登录和退出账号\n5. 全界面霓虹主题统一：所有页面统一暗色霓虹风格\n6. 项目搜索：支持按名称和描述搜索项目\n7. 项目分享：支持分享项目信息到其他应用"
+}

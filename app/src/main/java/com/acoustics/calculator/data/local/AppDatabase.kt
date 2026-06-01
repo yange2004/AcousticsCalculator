@@ -18,7 +18,7 @@ import com.acoustics.calculator.data.local.entity.*
         SilencerProjectEntity::class,
         UserEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

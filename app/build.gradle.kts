@@ -14,8 +14,8 @@ android {
         applicationId = "com.acoustics.calculator"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 4
+        versionName = "2.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -85,6 +85,12 @@ dependencies {
 
     // Charts
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+
+    // Lottie animations for flashy UI
+    implementation("com.airbnb.android:lottie-compose:6.4.0")
+
+    // Accompanist for advanced UI effects
+    implementation("com.google.accompanist:accompanist-systemuicontroller:0.35.0-alpha")
 
     // Gson
     implementation("com.google.code.gson:gson:2.10.1")

@@ -30,7 +30,7 @@ class ProjectListViewModel @Inject constructor(
         }
     }
 
-    fun createProject(name: String, description: String) {
+    fun createProject(name: String, description: String, projectType: String = "ROOM_ACOUSTICS") {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             projectRepository.createProject(
@@ -38,7 +38,7 @@ class ProjectListViewModel @Inject constructor(
                     id = 0,
                     name = name,
                     description = description,
-                    projectType = "ROOM_ACOUSTICS",
+                    projectType = projectType,
                     createdAt = now,
                     updatedAt = now,
                     tags = emptyList()

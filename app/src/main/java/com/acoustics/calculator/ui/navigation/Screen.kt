@@ -1,14 +1,11 @@
 package com.acoustics.calculator.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
- * All navigation destinations in the app.
+ * V2.0 — All navigation destinations with new Knowledge & Example modules
  */
 sealed class Screen(val route: String) {
     // Bottom navigation tabs
@@ -43,10 +40,33 @@ sealed class Screen(val route: String) {
 
     // Settings
     data object Settings : Screen("settings")
+
+    // ========= V2.0 NEW SCREENS =========
+
+    // Knowledge Hub
+    data object Knowledge : Screen("knowledge")
+    data object KnowledgeDetail : Screen("knowledge_detail/{articleId}") {
+        fun createRoute(articleId: Long) = "knowledge_detail/$articleId"
+    }
+
+    // Design Examples
+    data object Examples : Screen("examples")
+    data object ExampleDetail : Screen("example_detail/{exampleId}") {
+        fun createRoute(exampleId: Long) = "example_detail/$exampleId"
+    }
+
+    // Room Mode Calculator
+    data object RoomMode : Screen("room_mode")
+
+    // Sound Barrier Calculator
+    data object Barrier : Screen("barrier")
+
+    // HVAC Noise Calculator
+    data object Hvac : Screen("hvac")
 }
 
 /**
- * Bottom navigation tab items.
+ * Bottom navigation tab items
  */
 data class BottomNavItem(
     val label: String,
