@@ -184,28 +184,28 @@ fun ProjectDetailScreen(
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ActionChip(
-                            icon = Icons.Default.Description,
-                            label = "导出为CSV",
+                            icon = Icons.Default.Download,
+                            label = "导出CSV到下载",
                             color = NeonGreen,
                             onClick = {
                                 scope.launch {
-                                    val path = ExportUtils.exportProjectToCsv(context, proj)
-                                    exportResult = if (path != null) "✅ 已导出到「下载」文件夹: ${proj.name}.csv"
+                                    val file = ExportUtils.exportAndShareProject(context, proj, share = false)
+                                    exportResult = if (file != null) "✅ 已导出到手机「下载/AcousticsCalculator」文件夹"
                                     else "❌ 导出失败"
                                 }
                             }
                         )
                         ActionChip(
                             icon = Icons.Default.Share,
-                            label = "分享",
+                            label = "分享文件",
                             color = NeonCyan,
                             onClick = {
-                                val text = "建筑声学计算器 - 项目: ${proj.name}\n类型: ${proj.projectType}\n创建: ${formatDate(proj.createdAt)}"
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, text)
+                                scope.launch {
+                                    val file = ExportUtils.exportAndShareProject(context, proj, share = true)
+                                    if (file == null) {
+                                        exportResult = "❌ 导出失败"
+                                    }
                                 }
-                                context.startActivity(Intent.createChooser(intent, "分享项目"))
                             }
                         )
                     }

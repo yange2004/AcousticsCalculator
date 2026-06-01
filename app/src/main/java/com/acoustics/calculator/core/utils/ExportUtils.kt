@@ -3,9 +3,11 @@ package com.acoustics.calculator.core.utils
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.acoustics.calculator.core.constants.AppVersion
 import com.acoustics.calculator.domain.repository.Project
@@ -15,7 +17,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * 导出工具 — 文件存到手机真正的「下载」文件夹，用户能看见的那种
+ * 导出工具 — 文件存到手机「下载」文件夹 + 文件级分享
  */
 object ExportUtils {
 
@@ -23,116 +25,113 @@ object ExportUtils {
     private val displayDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
     /**
-     * 导出项目信息为 CSV 文件（存到手机「下载」文件夹）
+     * 导出项目为 CSV + 分享文件（一步完成）
+     * 返回 File 对象，用于 FileProvider 分享
      */
-    suspend fun exportProjectToCsv(context: Context, project: Project): String? {
-        return try {
+    suspend fun exportAndShareProject(context: Context, project: Project, share: Boolean = true): File? {
+        try {
+            // 1. 先写入缓存（保证成功）
             val fileName = "声学项目_${sanitizeFileName(project.name)}_${dateFormat.format(Date())}.csv"
-            val csvContent = buildProjectCsv(project)
-            if (Build.VERSION.SDK_INT >= 29) {
-                saveToPublicDownloads(context, fileName, "text/csv", csvContent)
-            } else {
-                saveToLegacyDownloads(context, fileName, csvContent)
+            val cacheFile = File(context.cacheDir, fileName)
+            cacheFile.writeText(buildProjectCsv(project), Charsets.UTF_8)
+
+            // 2. 同步到公共下载目录（让用户能看到）
+            syncToPublicDownloads(context, fileName, "text/csv", cacheFile)
+
+            // 3. 如果要分享，直接弹分享
+            if (share) {
+                shareFile(context, cacheFile, "text/csv")
             }
+
+            return cacheFile
         } catch (e: Exception) {
             e.printStackTrace()
-            null
+            return null
         }
     }
 
     /**
-     * 导出计算结果为 CSV 文件（存到手机「下载」文件夹）
+     * 导出计算结果为 CSV + 分享（一步完成）
      */
-    suspend fun exportResultToCsv(
+    suspend fun exportAndShareResult(
         context: Context,
         title: String,
         headers: List<String>,
-        dataRows: List<List<String>>
-    ): String? {
-        return try {
-            val fileName = "${sanitizeFileName(title)}_${dateFormat.format(Date())}.csv"
-            val csvContent = buildResultCsv(title, headers, dataRows)
-            if (Build.VERSION.SDK_INT >= 29) {
-                saveToPublicDownloads(context, fileName, "text/csv", csvContent)
-            } else {
-                saveToLegacyDownloads(context, fileName, csvContent)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-
-    /**
-     * 导出纯文本报告
-     */
-    suspend fun exportTextReport(context: Context, title: String, content: String): String? {
-        return try {
-            val fileName = "${sanitizeFileName(title)}_${dateFormat.format(Date())}.txt"
-            if (Build.VERSION.SDK_INT >= 29) {
-                saveToPublicDownloads(context, fileName, "text/plain", content)
-            } else {
-                saveToLegacyDownloads(context, fileName, content)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-
-    /**
-     * 分享文件（直接弹出系统分享菜单）
-     */
-    fun shareFile(context: Context, filePath: String, mimeType: String = "*/*") {
+        dataRows: List<List<String>>,
+        share: Boolean = true
+    ): File? {
         try {
-            val file = File(filePath)
-            if (!file.exists()) return
+            val fileName = "${sanitizeFileName(title)}_${dateFormat.format(Date())}.csv"
+            val cacheFile = File(context.cacheDir, fileName)
+            cacheFile.writeText(buildResultCsv(title, headers, dataRows), Charsets.UTF_8)
+
+            syncToPublicDownloads(context, fileName, "text/csv", cacheFile)
+
+            if (share) {
+                shareFile(context, cacheFile, "text/csv")
+            }
+
+            return cacheFile
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    /**
+     * 分享文件（通过 FileProvider 生成 URI，系统分享菜单）
+     */
+    fun shareFile(context: Context, file: File, mimeType: String = "*/*") {
+        try {
+            if (!file.exists()) {
+                Toast.makeText(context, "文件不存在", Toast.LENGTH_SHORT).show()
+                return
+            }
+
             val uri = FileProvider.getUriForFile(
-                context, "${context.packageName}.fileprovider", file
+                context,
+                "${context.packageName}.fileprovider",
+                file
             )
+
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = mimeType
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(Intent.createChooser(intent, "分享文件"))
+
+            // 用选择器确保用户能选微信/QQ/蓝牙等
+            val chooser = Intent.createChooser(intent, "分享文件到")
+            context.startActivity(chooser)
         } catch (e: Exception) {
             e.printStackTrace()
+            Toast.makeText(context, "分享失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
     /**
-     * 直接分享文本内容（不用先存文件）
+     * 分享文件（通过文件路径）
      */
-    fun shareText(context: Context, title: String, text: String) {
-        try {
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_SUBJECT, title)
-                putExtra(Intent.EXTRA_TEXT, text)
-            }
-            context.startActivity(Intent.createChooser(intent, "分享到"))
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+    fun shareFile(context: Context, filePath: String, mimeType: String = "*/*") {
+        val file = File(filePath)
+        shareFile(context, file, mimeType)
     }
 
-    // ======================== 构建文件内容 ========================
+    // ======================== 内容构建 ========================
 
     private fun buildProjectCsv(project: Project): String {
         val sb = StringBuilder()
-        sb.append("﻿") // BOM for Excel UTF-8
+        sb.append("﻿") // BOM for Excel
         sb.appendLine("建筑声学计算器 - 项目导出")
         sb.appendLine("导出时间,${displayDateFormat.format(Date())}")
         sb.appendLine("版本,${AppVersion.DISPLAY}")
         sb.appendLine()
-        sb.appendLine("项目名称,${project.name}")
-        sb.appendLine("项目类型,${project.projectType}")
-        sb.appendLine("描述,${project.description}")
+        sb.appendLine("项目名称,${escapeCsv(project.name)}")
+        sb.appendLine("项目类型,${escapeCsv(project.projectType)}")
+        sb.appendLine("描述,${escapeCsv(project.description)}")
         sb.appendLine("创建时间,${displayDateFormat.format(Date(project.createdAt))}")
         sb.appendLine("更新时间,${displayDateFormat.format(Date(project.updatedAt))}")
-        sb.appendLine("标签,${project.tags.joinToString(";")}")
         return sb.toString()
     }
 
@@ -143,86 +142,72 @@ object ExportUtils {
         sb.appendLine("导出时间,${displayDateFormat.format(Date())}")
         sb.appendLine("版本,${AppVersion.DISPLAY}")
         sb.appendLine()
-        sb.appendLine(headers.joinToString(",") { "\"$it\"" })
+        sb.appendLine(headers.joinToString(",") { escapeCsv(it) })
         dataRows.forEach { row ->
-            sb.appendLine(row.joinToString(",") { "\"$it\"" })
+            sb.appendLine(row.joinToString(",") { escapeCsv(it) })
         }
         return sb.toString()
     }
 
-    // ======================== 保存到公共目录（Android 10+） ========================
-
-    /**
-     * Android 10+ (API 29+)：使用 MediaStore 存到「下载」文件夹
-     * 用户在任何文件管理器都能看到
-     */
-    private fun saveToPublicDownloads(
-        context: Context,
-        fileName: String,
-        mimeType: String,
-        content: String
-    ): String? {
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            put(MediaStore.Downloads.MIME_TYPE, mimeType)
-            put(MediaStore.Downloads.DATE_ADDED, System.currentTimeMillis() / 1000)
-            put(MediaStore.Downloads.DATE_MODIFIED, System.currentTimeMillis() / 1000)
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-        }
-
-        val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-            ?: return null
-
-        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-            outputStream.write(content.toByteArray(Charsets.UTF_8))
-            outputStream.flush()
-        }
-
-        return uri.toString()
+    private fun escapeCsv(value: String): String {
+        return if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            "\"${value.replace("\"", "\"\"")}\""
+        } else value
     }
 
+    // ======================== 同步到公共下载目录 ========================
+
     /**
-     * Android 9 及以下：直接写公共 Downloads 目录
+     * 将缓存文件同步到手机「下载」文件夹，让用户能看见
      */
-    private fun saveToLegacyDownloads(
-        context: Context,
-        fileName: String,
-        content: String
-    ): String? {
-        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        if (!dir.exists()) dir.mkdirs()
-        val file = File(dir, fileName)
-        FileOutputStream(file).use { output ->
-            output.write(content.toByteArray(Charsets.UTF_8))
-            output.flush()
-        }
-        // 通知系统扫描
+    private fun syncToPublicDownloads(context: Context, fileName: String, mimeType: String, sourceFile: File) {
         try {
-            val intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).apply {
-                data = android.net.Uri.fromFile(file)
-            }
-            context.sendBroadcast(intent)
-        } catch (_: Exception) {}
-        return file.absolutePath
-    }
+            if (Build.VERSION.SDK_INT >= 29) {
+                // Android 10+：MediaStore API
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                    put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/AcousticsCalculator")
+                    put(MediaStore.Downloads.IS_PENDING, 0)
+                    put(MediaStore.Downloads.DATE_ADDED, System.currentTimeMillis() / 1000)
+                }
 
-    /**
-     * 返回导出文件所在目录的路径描述（用于界面显示）
-     */
-    fun getExportPathDescription(): String {
-        return if (Build.VERSION.SDK_INT >= 29) {
-            "手机存储/Download/"
-        } else {
-            "手机存储/Download/"
+                val uri = context.contentResolver.insert(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues
+                )
+
+                if (uri != null) {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        sourceFile.inputStream().use { input ->
+                            input.copyTo(output, bufferSize = 64 * 1024)
+                        }
+                        output.flush()
+                    }
+                }
+            } else {
+                // Android 9-：直接写公共目录
+                val dir = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DOWNLOADS
+                )
+                if (!dir.exists()) dir.mkdirs()
+                val destFile = File(dir, fileName)
+                sourceFile.copyTo(destFile, overwrite = true)
+
+                // 通知系统扫描
+                try {
+                    val intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).apply {
+                        data = Uri.fromFile(destFile)
+                    }
+                    context.sendBroadcast(intent)
+                } catch (_: Exception) {}
+            }
+        } catch (e: Exception) {
+            // 同步到公共目录失败不阻塞主流程
+            android.util.Log.w("ExportUtils", "syncToPublicDownloads failed: ${e.message}")
         }
     }
 
     private fun sanitizeFileName(name: String): String {
-        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            .take(30)
-    }
-
-    fun formatTimestamp(timestamp: Long): String {
-        return displayDateFormat.format(Date(timestamp))
+        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(30)
     }
 }

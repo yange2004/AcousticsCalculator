@@ -271,29 +271,58 @@ fun RoomAcousticsScreen(
                     }
 
                     // Export results
-                    OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                val headers = listOf("指标", "125Hz", "250Hz", "500Hz", "1000Hz", "2000Hz", "4000Hz", "8000Hz")
-                                val rows = result.rt60ByBand.entries
-                                    .sortedBy { it.key.hz }
-                                    .map { (band, value) ->
-                                        listOf("RT60") + result.rt60ByBand.entries
-                                            .sortedBy { it.key.hz }
-                                            .map { "${"%.2f".format(it.value)}" }
-                                    }
-                                val path = ExportUtils.exportResultToCsv(context, "室内声学_${result.formula.label}", headers, rows)
-                                exportResult = if (path != null) "✅ CSV已导出到手机「下载」文件夹" else "❌ 导出失败"
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGreen),
-                        border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("导出结果为 CSV")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    val headers = listOf("指标", "125Hz", "250Hz", "500Hz", "1000Hz", "2000Hz", "4000Hz", "8000Hz")
+                                    val rows = result.rt60ByBand.entries
+                                        .sortedBy { it.key.hz }
+                                        .map { (band, value) ->
+                                            listOf("RT60") + result.rt60ByBand.entries
+                                                .sortedBy { it.key.hz }
+                                                .map { "${"%.2f".format(it.value)}" }
+                                        }
+                                    val file = ExportUtils.exportAndShareResult(
+                                        context, "室内声学_${result.formula.label}", headers, rows, share = false
+                                    )
+                                    exportResult = if (file != null) "✅ CSV已导出到手机「下载/AcousticsCalculator」" else "❌ 导出失败"
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGreen),
+                            border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("导出CSV", fontSize = 13.sp)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    val headers = listOf("指标", "125Hz", "250Hz", "500Hz", "1000Hz", "2000Hz", "4000Hz", "8000Hz")
+                                    val rows = result.rt60ByBand.entries
+                                        .sortedBy { it.key.hz }
+                                        .map { (band, value) ->
+                                            listOf("RT60") + result.rt60ByBand.entries
+                                                .sortedBy { it.key.hz }
+                                                .map { "${"%.2f".format(it.value)}" }
+                                        }
+                                    ExportUtils.exportAndShareResult(
+                                        context, "室内声学_${result.formula.label}", headers, rows, share = true
+                                    )
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
+                            border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("分享CSV", fontSize = 13.sp)
+                        }
                     }
                 }
 
