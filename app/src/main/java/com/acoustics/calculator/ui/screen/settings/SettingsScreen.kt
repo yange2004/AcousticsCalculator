@@ -41,10 +41,17 @@ fun SettingsScreen(
     var downloadProgress by remember { mutableStateOf(0f) }
     var downloadComplete by remember { mutableStateOf(false) }
     var downloadError by remember { mutableStateOf(false) }
+    var isChecking by remember { mutableStateOf(false) }
+    var checkTrigger by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
-    LaunchedEffect(Unit) { updateResult = UpdateChecker.checkForUpdate() }
+    // 进入页面 + 点击检查时触发
+    LaunchedEffect(checkTrigger) {
+        isChecking = true
+        updateResult = UpdateChecker.checkForUpdate()
+        isChecking = false
+    }
 
     Scaffold(
         topBar = {
@@ -160,7 +167,20 @@ fun SettingsScreen(
                                 Text("最新版本: ${updateResult?.latestVersionName} 可供更新",
                                     color = NeonRed, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             } else {
-                                Text("已是最新版本", color = NeonGreen, fontSize = 13.sp)
+                                Text(if (isChecking) "正在检查..." else "已是最新版本",
+                                    color = if (isChecking) NeonCyan else NeonGreen, fontSize = 13.sp)
+                            }
+                        }
+                        // 手动刷新按钮
+                        IconButton(onClick = { checkTrigger++ }) {
+                            if (isChecking) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = NeonCyan,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.Refresh, "检查更新", tint = NeonCyan)
                             }
                         }
                     }
